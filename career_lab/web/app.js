@@ -24,7 +24,7 @@ async function refresh(){try{const state=await api('/api/state');current=state;
  const run=state.run,busy=run.status==='running'||state.import_status==='running';$('import').disabled=busy;$('run').disabled=busy||!state.snapshot;$('preview').disabled=!state.snapshot;
  $('import').textContent=state.import_status==='running'?'正在读取存档…':'读取阵容';
  $('status').textContent={idle:'等待测试',running:'正在模拟',completed:'测试完成',error:'需要处理',interrupted:'运行已中断'}[run.status]||run.status;
- $('progress').max=run.total||1;$('progress').value=run.completed||0;$('progressText').textContent=`已完成 ${run.completed||0} / ${run.total||0} 场`;
+ $('progress').max=run.total||1;$('progress').value=run.completed||0;$('progressText').textContent=`${run.stage?run.stage+' · ':''}已完成 ${run.completed||0} / ${run.total||0} 场`;$('rankingNotice').textContent=run.ranking_notice||'';
  $('export').disabled=run.status!=='completed';$('download').hidden=run.status!=='completed';
  $('ranking').replaceChildren(...(run.ranking||[]).map(r=>{let tr=document.createElement('tr');tr.append(...[r.tactic,r.matches,`${r.wins} / ${r.draws} / ${r.losses}`,(100*r.win_rate).toFixed(1)+'%',r.points_per_game.toFixed(2),`${r.goals_for} / ${r.goals_against}`].map(v=>text('td',v)));return tr}));
  if(state.error||run.error)error(state.error||run.error);count()

@@ -149,6 +149,19 @@ WEIGHTS = {
     "stc": {"finishing": 2, "off_the_ball": 2, "composure": 1, "anticipation": 1, "acceleration": 1, "heading": 1},
 }
 
+ROLE_WEIGHTS = {
+    "AdvancedPlaymaker": {"passing":3,"vision":3,"decisions":2,"first_touch":2,"technique":1},
+    "MidfieldPlaymaker": {"passing":3,"vision":3,"decisions":2,"first_touch":2,"teamwork":1},
+    "DeepLyingPlaymaker": {"passing":3,"vision":2,"decisions":2,"positioning":2,"tackling":1},
+    "SecondStriker": {"finishing":3,"off_the_ball":3,"composure":2,"acceleration":2,"anticipation":1},
+    "InsideForward": {"finishing":2,"off_the_ball":2,"dribbling":2,"acceleration":2,"composure":1},
+    "WideForward": {"finishing":2,"off_the_ball":2,"pace":2,"acceleration":2,"dribbling":1},
+    "ChannelForward": {"finishing":2,"off_the_ball":2,"pace":2,"acceleration":2,"composure":1},
+    "AdvancedWingBack": {"crossing":2,"dribbling":1,"pace":2,"stamina":2,"work_rate":2,"tackling":1},
+    "InsideWingBack": {"passing":2,"decisions":2,"tackling":2,"positioning":2,"stamina":1},
+    "BallPlayingCentreBack": {"marking":2,"tackling":2,"positioning":2,"passing":1,"jumping_reach":1,"pace":1},
+}
+
 
 def fit_score(player, phases, slot):
     values = []
@@ -160,7 +173,7 @@ def fit_score(player, phases, slot):
         if key != "gk" and player["positions"]["gk"] >= 15:
             return -1e9
         group = "fullback" if key in ("dl", "dr", "wbl", "wbr") else "wing" if key in ("ml", "mr", "aml", "amr") else key
-        weights = WEIGHTS[group]
+        weights = ROLE_WEIGHTS.get(phase[slot].get("role"), WEIGHTS[group])
         ability = sum(player["raw_attributes"][k]*v for k,v in weights.items())/sum(weights.values())
         values.append(ability * (.35+.65*familiarity/20))
     return sum(values)/len(values)
@@ -242,7 +255,7 @@ def apply_squad(team, squad, tactic, excluded=()):
     return picks
 
 
-def compare(snapshot, candidates, opponents, output, *, engine=None, seeds=range(271000,271010), excluded=(), progress=None):
+def compare(snapshot, candidates, opponents, output, *, engine=None, seeds=range(271000,271010), excluded=(), progress=None, ranking_metric="points_per_game"):
     """Each opponent entry holds club_uid and an explicitly selected tactic path."""
     engine = engine or Engine()
     output = Path(output)
@@ -250,6 +263,8 @@ def compare(snapshot, candidates, opponents, output, *, engine=None, seeds=range
     if (output / "state.json").exists():
         raise ValueError("输出目录已有实验；请使用新目录以保留记录")
     seeds = list(seeds)
+    if ranking_metric not in ("points_per_game", "win_rate"):
+        raise ValueError("未知排名目标")
     if not seeds or len(seeds) != len(set(seeds)):
         raise ValueError("种子不能为空或重复")
     status = engine.call("/api/status")
@@ -267,7 +282,8 @@ def compare(snapshot, candidates, opponents, output, *, engine=None, seeds=range
         write_json(output / "imports" / (Path(path).stem+".json"), {"tactic":tactic,"report":report})
     state = {"status":"running", "completed":0, "total":len(candidates)*len(opponents)*2*len(seeds), "legs":[],
              "club":squads[club_uid]["club"]["name"], "source_sha256":snapshot["source_sha256"], "limitations":LIMITATIONS,
-             "seeds":seeds, "excluded_uids":list(excluded), "opponents":opponents, "candidates":[str(p) for p in candidates]}
+             "seeds":seeds, "excluded_uids":list(excluded), "opponents":opponents, "candidates":[str(p) for p in candidates],
+             "ranking_metric":ranking_metric,"selection_policy":"position-and-role-heuristic-v2"}
     def persist():
         write_json(output/"state.json",state)
         if progress:
@@ -330,6 +346,8 @@ def summarize(state, output):
     for row in table.values():
         row["win_rate"] = row["wins"]/row["matches"]
         row["points_per_game"] = (3*row["wins"]+row["draws"])/row["matches"]
-    ranking = sorted(table.values(),key=lambda r:(r["points_per_game"],r["goals_for"]-r["goals_against"]),reverse=True)
+    metric=state.get("ranking_metric","points_per_game")
+    secondary="points_per_game" if metric=="win_rate" else "win_rate"
+    ranking = sorted(table.values(),key=lambda r:(r[metric],r[secondary],r["goals_for"]-r["goals_against"]),reverse=True)
     return {"matches":sum(r["matches"] for r in ranking),"club":state["club"],"ranking":ranking,"limitations":LIMITATIONS,
             "native_logs_verified":True,"seed_sets_verified":True,"selection_warning":"这是所测候选中的排名；需另用新种子复测，不能宣称全局最高胜率。"}

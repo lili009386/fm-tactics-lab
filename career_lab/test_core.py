@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from .core import ATTRIBUTE_KEYS, POSITION_KEYS, PROFILE_KEYS, Engine, apply_squad, choose_lineup, map_player
+from .core import ATTRIBUTE_KEYS, POSITION_KEYS, PROFILE_KEYS, Engine, apply_squad, choose_lineup, map_player, fit_score
 
 
 def fictional_player(index):
@@ -51,6 +51,15 @@ class MappingTests(unittest.TestCase):
         for url in ("https://example.com","http://127.0.0.1:80@example.com","http://localhost:80/private","http://localhost:80?target=remote"):
             with self.assertRaises(ValueError):Engine(url)
         self.assertEqual(Engine("http://127.0.0.1:18765").url,"http://127.0.0.1:18765")
+
+    def test_role_changes_preference_between_creator_and_scorer(self):
+        creator,scorer=fictional_player(1),fictional_player(2)
+        creator["raw_attributes"].update(passing=95,vision=95,decisions=90)
+        scorer["raw_attributes"].update(finishing=95,off_the_ball=95,acceleration=90)
+        attacking=[[{"position":"AMC","role":"SecondStriker"}]]
+        creating=[[{"position":"AMC","role":"AdvancedPlaymaker"}]]
+        self.assertGreater(fit_score(scorer,attacking,0),fit_score(creator,attacking,0))
+        self.assertGreater(fit_score(creator,creating,0),fit_score(scorer,creating,0))
 
 
 if __name__ == "__main__":unittest.main()
